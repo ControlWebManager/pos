@@ -6,29 +6,53 @@ odoo.define("pos_lot_selection.models", function (require) {
 
     var models = require("point_of_sale.models");
     var session = require("web.session");
-
+   
+    var _posmodel_super = models.PosModel.prototype;
+   
     models.PosModel = models.PosModel.extend({
-        get_lot: function (product, location_id) {
-            var done = new $.Deferred();
-            session.rpc("/web/dataset/search_read", {
-                "model": "stock.quant",
-                "domain": [
-                    ["location_id", "=", location_id],
-                    ["product_id", "=", product],
-                    ["lot_id", "!=", false]]
-            }, {'async': false}).then(function (result) {
-                var product_lot = {};
-                if (result.length) {
-                    for (var i = 0; i < result.length; i++) {
-                        if (product_lot[result.records[i].lot_id[1]]) {
-                            product_lot[result.records[i].lot_id[1]] += result.records[i].quantity;
-                        } else {
-                            product_lot[result.records[i].lot_id[1]] = result.records[i].quantity;
-                        }
+        initialize: function(session, attributes) {
+               _posmodel_super.initialize.apply(this, arguments);
+               this.stock_quant = []
+               var model_stock_quant = {
+                    model:  'stock.quant',
+                    fields: ['product_id','lot_id', 'qty','name','location_id'],
+                    domain: [["lot_id", "!=", false]],
+                    loaded: function(self, stock_quant){
+                        self.stock_quant = stock_quant;
                     }
+                };
+                _posmodel_super.models.push(model_stock_quant);
+    
+               //console.log('_posmodel_super,models',  _posmodel_super.models)
+         },
+
+        get_lot: function(product, location_id, stock_quant) {
+            var done = new $.Deferred();
+            var self = this;
+            var product_lot = [];
+
+            //console.log('stock_quant', stock_quant)
+
+            //console.log('location_id', stock_quant)
+            if (stock_quant.length) {
+
+                var filter_models =  stock_quant.filter(function(filter) {
+                    return (filter.product_id[0] == product) && (filter.location_id[0] == location_id);
+                });
+
+                //console.log('filter_models',filter_models)
+
+                for (var i = 0; i < filter_models.length; i++) {
+                    if(stock_quant[i].product_id[0] === product && stock_quant[i].location_id[0] === location_id ){
+                        product_lot.push({
+                            'lot_name': stock_quant[i].lot_id[1],
+                            'qty': stock_quant[i].qty,
+                        });
+                     }
                 }
-                done.resolve(product_lot);
-            });
+            }
+            done.resolve(product_lot);
+
             return done;
         },
     });
